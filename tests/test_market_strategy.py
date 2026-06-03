@@ -40,7 +40,9 @@ class TestMarketAnalyzerStrategyPrompt(unittest.TestCase):
         self.assertIn("A股市场三段式复盘策略", prompt)
 
     def test_us_prompt_contains_strategy_plan_section(self):
-        analyzer = MarketAnalyzer(region="us")
+        with patch("src.market_analyzer.get_config", return_value=SimpleNamespace(report_language="en")):
+            analyzer = MarketAnalyzer(region="us")
+
         prompt = analyzer._build_review_prompt(MarketOverview(date="2026-02-24"), [])
 
         self.assertIn("Strategy Plan", prompt)
