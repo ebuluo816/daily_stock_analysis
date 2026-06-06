@@ -506,17 +506,22 @@ def _prime_daily_market_context(
         service = DailyMarketContextService(db_manager=pipeline.db)
         pipeline._daily_market_context_service = service
 
-    context = service.get_context(
-        region=region,
-        config=config,
-        notifier=pipeline.notifier,
-        analyzer=pipeline.analyzer,
-        search_service=pipeline.search_service,
-        force_refresh=False,
-        allow_generate=allow_generate,
-        persist_market_review_history=False,
-        target_date=target_date,
-    )
+    get_context_kwargs = {
+        "region": region,
+        "config": config,
+        "notifier": pipeline.notifier,
+        "analyzer": pipeline.analyzer,
+        "search_service": pipeline.search_service,
+        "force_refresh": False,
+        "allow_generate": allow_generate,
+        "persist_market_review_history": False,
+        "target_date": target_date,
+    }
+    current_query_id = getattr(pipeline, "query_id", None)
+    if isinstance(current_query_id, str) and current_query_id.strip():
+        get_context_kwargs["current_query_id"] = current_query_id
+
+    context = service.get_context(**get_context_kwargs)
     if context is None:
         return ""
 

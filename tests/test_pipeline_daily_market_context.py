@@ -33,6 +33,7 @@ def test_pipeline_loads_daily_market_context_when_market_review_enabled() -> Non
     pipeline.notifier = MagicMock()
     pipeline.analyzer = MagicMock()
     pipeline.search_service = MagicMock()
+    pipeline.query_id = "pipeline-query"
 
     with patch("src.core.pipeline.DailyMarketContextService") as service_cls:
         service = service_cls.return_value
@@ -53,6 +54,7 @@ def test_pipeline_loads_daily_market_context_when_market_review_enabled() -> Non
         force_refresh=False,
         allow_generate=True,
         target_date=target_date,
+        current_query_id="pipeline-query",
     )
 
 

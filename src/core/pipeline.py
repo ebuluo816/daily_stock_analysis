@@ -1324,16 +1324,20 @@ class StockAnalysisPipeline:
                     if service is None:
                         service = DailyMarketContextService(db_manager=self.db)
                         self._daily_market_context_service = service
-            return service.get_context(
-                region=market,
-                config=self.config,
-                notifier=self.notifier,
-                analyzer=self.analyzer,
-                search_service=self.search_service,
-                force_refresh=force_refresh,
-                allow_generate=getattr(self, "daily_market_context_allow_generate", True),
-                target_date=target_date,
-            )
+            get_context_kwargs = {
+                "region": market,
+                "config": self.config,
+                "notifier": self.notifier,
+                "analyzer": self.analyzer,
+                "search_service": self.search_service,
+                "force_refresh": force_refresh,
+                "allow_generate": getattr(self, "daily_market_context_allow_generate", True),
+                "target_date": target_date,
+            }
+            current_query_id = getattr(self, "query_id", None)
+            if isinstance(current_query_id, str) and current_query_id.strip():
+                get_context_kwargs["current_query_id"] = current_query_id
+            return service.get_context(**get_context_kwargs)
         except Exception as exc:
             logger.warning("加载大盘环境上下文失败，个股分析继续: %s", exc, exc_info=True)
             return None

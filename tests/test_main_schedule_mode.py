@@ -680,6 +680,7 @@ class MainScheduleModeTestCase(unittest.TestCase):
         pipeline = MagicMock()
         pipeline._daily_market_context_service = None
         pipeline.db = MagicMock()
+        pipeline.query_id = "prime-query"
         context = SimpleNamespace(source="analysis_history", summary="历史复盘摘要")
         service = MagicMock()
         service.get_context.return_value = context
@@ -705,6 +706,7 @@ class MainScheduleModeTestCase(unittest.TestCase):
         self.assertFalse(call_kwargs["allow_generate"])
         self.assertFalse(call_kwargs["persist_market_review_history"])
         self.assertEqual(call_kwargs["target_date"], target_date)
+        self.assertEqual(call_kwargs["current_query_id"], "prime-query")
 
     def test_run_full_analysis_generates_full_market_review_once_before_stock_analysis(self) -> None:
         args = self._make_args()

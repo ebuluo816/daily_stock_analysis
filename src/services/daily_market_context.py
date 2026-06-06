@@ -96,6 +96,7 @@ class DailyMarketContextService:
         allow_generate: bool = True,
         persist_market_review_history: bool = True,
         target_date: Optional[date] = None,
+        current_query_id: Optional[str] = None,
     ) -> Optional[DailyMarketContext]:
         normalized_region = _normalize_region(region)
         context_date = target_date or self._today_fn()
@@ -109,6 +110,7 @@ class DailyMarketContextService:
             history_context = self._load_same_day_history(
                 region=normalized_region,
                 target_date=context_date,
+                current_query_id=current_query_id,
             )
             if history_context is not None:
                 self._cache[cache_key] = history_context
@@ -123,6 +125,7 @@ class DailyMarketContextService:
                     history_context = self._load_same_day_history(
                         region=normalized_region,
                         target_date=context_date,
+                        current_query_id=current_query_id,
                     )
                     if history_context is not None:
                         self._cache[cache_key] = history_context
@@ -137,6 +140,7 @@ class DailyMarketContextService:
                 history_context = self._load_same_day_history(
                     region=normalized_region,
                     target_date=context_date,
+                    current_query_id=current_query_id,
                 )
                 if history_context is not None:
                     self._cache[cache_key] = history_context
@@ -160,6 +164,7 @@ class DailyMarketContextService:
         *,
         region: str,
         target_date: date,
+        current_query_id: Optional[str] = None,
     ) -> Optional[DailyMarketContext]:
         try:
             history_days = _history_lookup_days(
@@ -178,9 +183,6 @@ class DailyMarketContextService:
         for record in records or []:
             if getattr(record, "report_type", None) != MARKET_REVIEW_REPORT_TYPE:
                 continue
-            created_date = _coerce_date(getattr(record, "created_at", None))
-            if created_date != target_date:
-                continue
 
             snapshot = _loads_mapping(getattr(record, "context_snapshot", None))
             record_region = snapshot.get("market_review_region")
@@ -188,6 +190,14 @@ class DailyMarketContextService:
             if not isinstance(payload, Mapping):
                 payload = _payload_from_raw_record(record)
             if not self._record_supports_region(payload, record_region, region):
+                continue
+            if not _record_matches_target_date(
+                record=record,
+                payload=payload if isinstance(payload, Mapping) else {},
+                region=region,
+                target_date=target_date,
+                current_query_id=current_query_id,
+            ):
                 continue
 
             context = self._build_context_from_payload(
@@ -414,6 +424,54 @@ def _coerce_date(value: Any) -> Optional[date]:
         except ValueError:
             return None
     return None
+
+
+def _payload_trade_date(payload: Mapping[str, Any], region: str) -> Optional[date]:
+    scoped_payload = _payload_for_region(payload, region)
+    market_light = scoped_payload.get("market_light")
+    candidates: List[Any] = [
+        scoped_payload.get("trade_date"),
+        scoped_payload.get("date"),
+    ]
+    if isinstance(market_light, Mapping):
+        candidates.extend(
+            [
+                market_light.get("trade_date"),
+                market_light.get("date"),
+            ]
+        )
+
+    for candidate in candidates:
+        parsed = _coerce_date(candidate)
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _record_matches_query_id(record: Any, current_query_id: Optional[str]) -> bool:
+    if not isinstance(current_query_id, str) or not current_query_id.strip():
+        return False
+    record_query_id = getattr(record, "query_id", None)
+    return (
+        isinstance(record_query_id, str)
+        and record_query_id.strip() == current_query_id.strip()
+    )
+
+
+def _record_matches_target_date(
+    *,
+    record: Any,
+    payload: Mapping[str, Any],
+    region: str,
+    target_date: date,
+    current_query_id: Optional[str] = None,
+) -> bool:
+    payload_date = _payload_trade_date(payload, region)
+    if payload_date is not None:
+        return payload_date == target_date or _record_matches_query_id(record, current_query_id)
+
+    created_date = _coerce_date(getattr(record, "created_at", None))
+    return created_date == target_date or _record_matches_query_id(record, current_query_id)
 
 
 def _history_lookup_days(*, target_date: date, today: date) -> int:

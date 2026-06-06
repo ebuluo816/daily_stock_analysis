@@ -15,7 +15,13 @@ from src.services.daily_market_context import (
 )
 
 
-def _history_record(*, created_at: datetime, region: str = "cn") -> SimpleNamespace:
+def _history_record(
+    *,
+    created_at: datetime,
+    region: str = "cn",
+    payload_date: str | None = None,
+    query_id: str = "market-review-q",
+) -> SimpleNamespace:
     payload = {
         "kind": "market_review",
         "region": region,
@@ -29,6 +35,9 @@ def _history_record(*, created_at: datetime, region: str = "cn") -> SimpleNamesp
         ],
         "markdown_report": "市场退潮，高风险，建议观望，仓位上限30%。",
     }
+    if payload_date:
+        payload["date"] = payload_date
+        payload["market_light"] = {"trade_date": payload_date}
     snapshot = {
         "report_kind": "market_review",
         "market_review_region": region,
@@ -36,7 +45,7 @@ def _history_record(*, created_at: datetime, region: str = "cn") -> SimpleNamesp
     }
     return SimpleNamespace(
         id=7,
-        query_id="market-review-q",
+        query_id=query_id,
         code="MARKET",
         report_type="market_review",
         analysis_summary="市场退潮，高风险，建议观望，仓位上限30%。",
@@ -102,6 +111,68 @@ def test_reuses_previous_trading_day_history_after_weekend() -> None:
         days=5,
         limit=20,
     )
+    run_review.assert_not_called()
+
+
+def test_reuses_history_by_payload_trade_date_when_created_at_is_wall_clock_date() -> None:
+    db = MagicMock()
+    db.get_analysis_history.return_value = [
+        _history_record(
+            created_at=datetime(2026, 6, 6, 9, 30),
+            payload_date="2026-06-05",
+        )
+    ]
+    service = DailyMarketContextService(
+        db_manager=db,
+        today_fn=lambda: date(2026, 6, 6),
+    )
+
+    with patch("src.services.daily_market_context.run_market_review") as run_review:
+        context = service.get_context(
+            region="cn",
+            config=SimpleNamespace(report_language="zh"),
+            notifier=MagicMock(),
+            analyzer=MagicMock(),
+            search_service=MagicMock(),
+            target_date=date(2026, 6, 5),
+            allow_generate=False,
+        )
+
+    assert context is not None
+    assert context.trade_date == date(2026, 6, 5)
+    assert context.source == "analysis_history"
+    run_review.assert_not_called()
+
+
+def test_reuses_same_run_history_when_saved_under_different_wall_clock_date() -> None:
+    db = MagicMock()
+    db.get_analysis_history.return_value = [
+        _history_record(
+            created_at=datetime(2026, 6, 6, 9, 30),
+            payload_date="2026-06-06",
+            query_id="same-run-q",
+        )
+    ]
+    service = DailyMarketContextService(
+        db_manager=db,
+        today_fn=lambda: date(2026, 6, 6),
+    )
+
+    with patch("src.services.daily_market_context.run_market_review") as run_review:
+        context = service.get_context(
+            region="cn",
+            config=SimpleNamespace(report_language="zh"),
+            notifier=MagicMock(),
+            analyzer=MagicMock(),
+            search_service=MagicMock(),
+            target_date=date(2026, 6, 5),
+            allow_generate=False,
+            current_query_id="same-run-q",
+        )
+
+    assert context is not None
+    assert context.trade_date == date(2026, 6, 5)
+    assert context.source == "analysis_history"
     run_review.assert_not_called()
 
 
