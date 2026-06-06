@@ -385,14 +385,14 @@ describe('HomePage', () => {
     fireEvent.click(await screen.findByRole('button', { name: '大盘复盘' }));
 
     await waitFor(() => {
-      expect(analysisApi.triggerMarketReview).toHaveBeenCalledWith({ sendNotification: true, reportLanguage: 'zh' });
+      expect(analysisApi.triggerMarketReview).toHaveBeenCalledWith({ sendNotification: true });
     });
     expect(await screen.findByText('大盘复盘已完成')).toBeInTheDocument();
     expect(await screen.findByText('市场复盘报告示例文本')).toBeInTheDocument();
     expect(analysisApi.getStatus).toHaveBeenCalledWith('task-1');
   });
 
-  it('submits new analyses and market reviews using the current UI language', async () => {
+  it('keeps report language unset when only the UI language is English', async () => {
     window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, 'en');
     vi.mocked(historyApi.getList).mockResolvedValue({
       total: 0,
@@ -437,11 +437,10 @@ describe('HomePage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Market review' }));
 
     await waitFor(() => {
-      expect(analysisApi.analyzeAsync).toHaveBeenCalledWith(expect.objectContaining({
-        reportLanguage: 'en',
-      }));
-      expect(analysisApi.triggerMarketReview).toHaveBeenCalledWith({ sendNotification: true, reportLanguage: 'en' });
+      expect(analysisApi.analyzeAsync).toHaveBeenCalled();
+      expect(analysisApi.triggerMarketReview).toHaveBeenCalledWith({ sendNotification: true });
     });
+    expect(vi.mocked(analysisApi.analyzeAsync).mock.calls[0]?.[0]).not.toHaveProperty('reportLanguage');
   });
 
   it('uses the payload language for live market review controls', async () => {
@@ -872,6 +871,7 @@ describe('HomePage', () => {
       originalQuery: '600519',
       forceRefresh: true,
     }));
+    expect(vi.mocked(analysisApi.analyzeAsync).mock.calls[0]?.[0]).not.toHaveProperty('reportLanguage');
   });
 
   it('passes the selected strategy when submitting stock analysis', async () => {

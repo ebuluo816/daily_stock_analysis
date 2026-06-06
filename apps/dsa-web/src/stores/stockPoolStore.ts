@@ -789,7 +789,7 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
         notify,
         forceRefresh,
         skills,
-        reportLanguage: options?.reportLanguage,
+        ...(options?.reportLanguage !== undefined && { reportLanguage: options.reportLanguage }),
       });
 
       if (requestId !== analyzeRequestSeq) {

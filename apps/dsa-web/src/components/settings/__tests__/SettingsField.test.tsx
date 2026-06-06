@@ -6,6 +6,37 @@ import { UI_LANGUAGE_STORAGE_KEY } from '../../../utils/uiLanguage';
 import { SettingsField } from '../SettingsField';
 
 describe('SettingsField', () => {
+  it('prefers localized Chinese field titles over backend schema titles', () => {
+    render(
+      <SettingsField
+        item={{
+          key: 'STOCK_LIST',
+          value: '600519',
+          rawValueExists: true,
+          isMasked: false,
+          schema: {
+            key: 'STOCK_LIST',
+            title: 'Stock List',
+            category: 'base',
+            dataType: 'string',
+            uiControl: 'text',
+            isSensitive: false,
+            isRequired: false,
+            isEditable: true,
+            options: [],
+            validation: {},
+            displayOrder: 1,
+          },
+        }}
+        value="600519"
+        onChange={vi.fn()}
+      />
+    );
+
+    expect(screen.getByLabelText('自选股列表')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Stock List')).not.toBeInTheDocument();
+  });
+
   it('renders sensitive field metadata and validation errors', () => {
     const onChange = vi.fn();
 
@@ -121,7 +152,7 @@ describe('SettingsField', () => {
       />
     );
 
-    const select = screen.getByLabelText('Notification Minimum Severity');
+    const select = screen.getByLabelText('最小通知级别');
     expect(screen.getByRole('option', { name: '未设置' })).not.toBeDisabled();
     expect(screen.queryByRole('option', { name: '请选择' })).not.toBeInTheDocument();
 

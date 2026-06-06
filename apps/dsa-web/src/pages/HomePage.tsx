@@ -368,10 +368,9 @@ const HomePage: React.FC = () => {
         originalQuery: query,
         selectionSource: selectionSource ?? 'manual',
         skills: selectedAnalysisSkills,
-        reportLanguage: uiLanguage,
       });
     },
-    [query, selectedAnalysisSkills, submitAnalysis, uiLanguage],
+    [query, selectedAnalysisSkills, submitAnalysis],
   );
 
   const handleAskFollowUp = useCallback(() => {
@@ -397,9 +396,8 @@ const HomePage: React.FC = () => {
       selectionSource: 'manual',
       forceRefresh: true,
       skills: selectedAnalysisSkills,
-      reportLanguage: uiLanguage,
     });
-  }, [selectedAnalysisSkills, selectedReport, submitAnalysis, uiLanguage]);
+  }, [selectedAnalysisSkills, selectedReport, submitAnalysis]);
 
   const pollMarketReviewStatus = useCallback(
     async (taskId: string) => {
@@ -527,7 +525,7 @@ const HomePage: React.FC = () => {
     setMarketReviewPayload(null);
     scrollMarketReviewFeedbackIntoView();
     try {
-      const result = await analysisApi.triggerMarketReview({ sendNotification: notify, reportLanguage: uiLanguage });
+      const result = await analysisApi.triggerMarketReview({ sendNotification: notify });
       setMarketReviewNotice({
         variant: 'success',
         title: t('home.marketReviewSubmitted'),
@@ -545,7 +543,7 @@ const HomePage: React.FC = () => {
     } finally {
       setIsSubmittingMarketReview(false);
     }
-  }, [notify, pollMarketReviewStatus, scrollMarketReviewFeedbackIntoView, t, uiLanguage]);
+  }, [notify, pollMarketReviewStatus, scrollMarketReviewFeedbackIntoView, t]);
 
   const mergedStockBarItems = useMemo<StockBarItem[]>(() => {
     const latestMarketReview = marketReviewHistoryItems[0];
