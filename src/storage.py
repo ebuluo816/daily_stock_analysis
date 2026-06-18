@@ -45,6 +45,7 @@ from sqlalchemy import (
     func,
     inspect,
     MetaData,
+    Table,
 )
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import (
@@ -1196,7 +1197,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             )
             return
 
-        target_columns = ("source_id", "scope_type", "scope_value", "market", "url")
+        target_columns = ("source_id", "url", "scope_type", "scope_value", "market")
         has_target_index = any(tuple(cols) == target_columns for cols in unique_indexes)
         has_legacy_url_unique = any(tuple(cols) == ("url",) for cols in unique_indexes)
 
@@ -1211,14 +1212,17 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         self._rebuild_intelligence_items_table()
 
     def _rebuild_intelligence_items_table(self) -> None:
-        temporary_table = "intelligence_items_recreate_tmp"
+        temporary_table = f"intelligence_items_recreate_tmp_{int(time.time() * 1_000_000_000)}"
         columns = [column.name for column in IntelligenceItem.__table__.columns]
         select_clause = ", ".join(f'"{column}"' for column in columns)
+        scoped_index_columns = ", ".join(["source_id", "url", "scope_type", "scope_value", "market"])
+        scoped_index_name = "uix_intel_item_scope"
 
         tmp_metadata = MetaData()
-        tmp_table = IntelligenceItem.__table__.to_metadata(
+        tmp_table = Table(
+            temporary_table,
             tmp_metadata,
-            name=temporary_table,
+            *(column.copy() for column in IntelligenceItem.__table__.columns),
         )
         logger.info("Rebuilding intelligence_items table to align composite uniqueness constraints.")
         with self._engine.begin() as connection:
@@ -1234,6 +1238,12 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             connection.execute(
                 text(f'ALTER TABLE "{temporary_table}" RENAME TO intelligence_items')
             )
+            connection.execute(
+                text(
+                    f"CREATE UNIQUE INDEX IF NOT EXISTS {scoped_index_name} ON "
+                    f"intelligence_items ({scoped_index_columns})"
+                )
+            )
 
     def _ensure_intelligence_items_scoped_unique_index_once(self) -> None:
         target_index_name = "uix_intel_item_scope"
@@ -1244,7 +1254,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             for row in rows:
                 if row[1] == target_index_name:
                     return
-            index_columns = ", ".join(["source_id", "scope_type", "scope_value", "market", "url"])
+            index_columns = ", ".join(["source_id", "url", "scope_type", "scope_value", "market"])
             connection.execute(
                 text(
                     f"CREATE UNIQUE INDEX IF NOT EXISTS {target_index_name} ON "
