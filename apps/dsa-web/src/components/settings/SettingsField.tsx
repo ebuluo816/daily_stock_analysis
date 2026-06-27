@@ -49,6 +49,14 @@ function parseMultiSelectValues(value: string): string[] {
   return values.length ? Array.from(new Set(values)) : [];
 }
 
+function getExclusiveMultiSelectValue(item: SystemConfigItem, selectableValues: string[]): string | null {
+  if (item.key === 'MARKET_REVIEW_REGION' && selectableValues.includes('both')) {
+    return 'both';
+  }
+
+  return null;
+}
+
 function serializeMultiValues(values: string[]): string {
   return values.map((entry) => entry.trim()).join(',');
 }
@@ -116,10 +124,16 @@ function renderFieldControl(
         schema.options,
         language,
       );
-      const selectedValues = new Set(parseMultiSelectValues(value));
       const selectableValues = normalizedOptions
         .map((option) => option.value)
         .filter((optionValue) => optionValue);
+      const exclusiveValue = getExclusiveMultiSelectValue(item, selectableValues);
+      const parsedSelectedValues = parseMultiSelectValues(value);
+      const selectedValues = new Set(
+        exclusiveValue && parsedSelectedValues.includes(exclusiveValue)
+          ? [exclusiveValue]
+          : parsedSelectedValues,
+      );
 
       return (
         <div className="space-y-2">
@@ -133,7 +147,15 @@ function renderFieldControl(
               onChange={(event) => {
                 const nextValues = new Set(selectedValues);
                 if (event.target.checked) {
-                  nextValues.add(option.value);
+                  if (exclusiveValue && option.value === exclusiveValue) {
+                    nextValues.clear();
+                    nextValues.add(option.value);
+                  } else {
+                    if (exclusiveValue) {
+                      nextValues.delete(exclusiveValue);
+                    }
+                    nextValues.add(option.value);
+                  }
                 } else {
                   nextValues.delete(option.value);
                 }

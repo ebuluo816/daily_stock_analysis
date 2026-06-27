@@ -159,6 +159,50 @@ describe('SettingsField', () => {
 
   });
 
+  it('keeps the all-markets market review checkbox mutually exclusive', () => {
+    const onChange = vi.fn();
+    const renderMarketReviewRegion = (fieldValue: string) => (
+      <SettingsField
+        item={{
+          key: 'MARKET_REVIEW_REGION',
+          value: fieldValue,
+          rawValueExists: true,
+          isMasked: false,
+          schema: {
+            key: 'MARKET_REVIEW_REGION',
+            title: 'Market Review Region',
+            category: 'system',
+            dataType: 'string',
+            uiControl: 'select',
+            isSensitive: false,
+            isRequired: false,
+            isEditable: true,
+            options: ['cn', 'hk', 'us', 'jp', 'kr', 'both'],
+            validation: { multiValue: true },
+            displayOrder: 1,
+          },
+        }}
+        value={fieldValue}
+        onChange={onChange}
+      />
+    );
+
+    const { rerender } = render(renderMarketReviewRegion('cn,hk,both'));
+
+    expect(screen.getByRole('checkbox', { name: '全部市场' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'A 股' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: '港股' })).not.toBeChecked();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'A 股' }));
+    expect(onChange).toHaveBeenLastCalledWith('MARKET_REVIEW_REGION', 'cn');
+
+    onChange.mockClear();
+    rerender(renderMarketReviewRegion('cn,hk'));
+
+    fireEvent.click(screen.getByRole('checkbox', { name: '全部市场' }));
+    expect(onChange).toHaveBeenLastCalledWith('MARKET_REVIEW_REGION', 'both');
+  });
+
   it('allows optional select fields to be cleared when schema provides an empty option', () => {
     const onChange = vi.fn();
 
