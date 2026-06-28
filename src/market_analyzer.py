@@ -1380,7 +1380,6 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
     def _build_review_prompt(self, overview: MarketOverview, news: List) -> str:
         """构建复盘报告 Prompt"""
         review_language = self._get_review_language()
-        market_scope_name_en = self._get_market_scope_name("en")
 
         # 指数行情信息（简洁格式，不用emoji）
         indices_text = ""
@@ -1494,10 +1493,20 @@ Concept lagging: {bottom_concepts_text if bottom_concepts_text else "N/A"}"""
                 else "2-3句话概括指数表现、新闻线索和整体风险状态，不要补写未提供的市场宽度或资金流数据"
             )
 
+        output_template_sections = self._build_output_template_sections(review_language)
+        zh_market_scope_name = self._get_market_scope_name("zh")
+        zh_report_title = f"{overview.date} 大盘复盘"
+        if self.region in ("jp", "kr"):
+            zh_report_title = f"{overview.date} {zh_market_scope_name}大盘复盘"
+        workflow_hint = (
+            "报告要像交易员盘后工作台：先给结论，再按数据表、主线、催化、计划展开"
+            if self.profile.has_market_stats or self.profile.has_sector_rankings
+            else "报告要像交易员盘后工作台：先给结论，再按指数、新闻催化和计划展开"
+        )
+
         if review_language == "en":
             report_title = self._get_review_title(overview.date).removeprefix("## ").strip()
-            output_template_sections = self._build_output_template_sections(review_language)
-            return f"""You are a professional {market_scope_name_en} analyst. Please produce a concise market recap report based on the data below.
+            return f"""You are a professional {self._get_market_scope_name('en')} analyst. Please produce a concise market recap report based on the data below.
 
 [Requirements]
 - Output pure Markdown only
@@ -1549,19 +1558,8 @@ Concept lagging: {bottom_concepts_text if bottom_concepts_text else "N/A"}"""
 Output the report content directly, no extra commentary.
 """
 
-        # 中文提示语按 region 保持市场边界，避免 JP/KR 复盘继承 A/H/美股语境。
-        zh_market_scope_name = self._get_market_scope_name("zh")
-        zh_report_title = f"{overview.date} 大盘复盘"
-        if self.region in ("jp", "kr"):
-            zh_report_title = f"{overview.date} {zh_market_scope_name}大盘复盘"
-        output_template_sections = self._build_output_template_sections(review_language)
-        workflow_hint = (
-            "报告要像交易员盘后工作台：先给结论，再按数据表、主线、催化、计划展开"
-            if self.profile.has_market_stats or self.profile.has_sector_rankings
-            else "报告要像交易员盘后工作台：先给结论，再按指数、新闻催化和计划展开"
-        )
-
-        return f"""你是一位专业的{zh_market_scope_name}分析师，请根据以下数据生成一份结构化的{zh_market_scope_name}大盘复盘报告。
+        # A 股场景使用中文提示语
+        return f"""你是一位专业的{self._get_market_scope_name('zh')}分析师，请根据以下数据生成一份结构化的{self._get_market_scope_name('zh')}大盘复盘报告。
 
 【重要】输出要求：
 - 必须输出纯 Markdown 文本格式

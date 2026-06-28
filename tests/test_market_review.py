@@ -301,40 +301,6 @@ class MarketReviewLocalizationTestCase(unittest.TestCase):
         self.assertNotIn("A股大盘复盘", result)
         self.assertNotIn("美股大盘复盘", result)
 
-    def test_run_market_review_jp_kr_skips_market_light_snapshot_schema(self) -> None:
-        notifier = self._make_notifier()
-
-        from src.market_analyzer import MarketOverview
-
-        with patch.object(
-            market_review_module.MarketAnalyzer,
-            "get_market_overview",
-            side_effect=[
-                MarketOverview(date="2026-03-06"),
-                MarketOverview(date="2026-03-06"),
-            ],
-        ), patch.object(
-            market_review_module.MarketAnalyzer,
-            "search_market_news",
-            return_value=[],
-        ), patch.object(
-            market_review_module.MarketAnalyzer,
-            "generate_market_review",
-            side_effect=["JP body", "KR body"],
-        ), patch.object(market_review_module, "_persist_market_review_history") as persist_history:
-            result = run_market_review(
-                notifier,
-                config=SimpleNamespace(report_language="zh", market_review_region="jp,kr"),
-                send_notification=False,
-            )
-
-        self.assertIn("# 日股大盘复盘\n\nJP body", result)
-        self.assertIn("# 韩股大盘复盘\n\nKR body", result)
-        self.assertEqual(persist_history.call_args.kwargs["market_light_snapshots"], {})
-        payload = persist_history.call_args.kwargs["market_review_payload"]
-        self.assertNotIn("market_light", payload["markets"]["jp"])
-        self.assertNotIn("market_light", payload["markets"]["kr"])
-
     def test_run_market_review_comma_joined_subset_cn_us(self) -> None:
         """Regression: compute_effective_region("both", {"cn","us"}) -> "cn,us"
         must produce A-share + US report without HK."""
@@ -429,6 +395,40 @@ class MarketReviewLocalizationTestCase(unittest.TestCase):
         self.assertEqual(set(snapshots), {"cn", "us"})
         self.assertEqual(snapshots["cn"]["score"], 60)
         self.assertEqual(snapshots["us"]["score"], 55)
+
+    def test_run_market_review_jp_kr_skips_market_light_snapshot_schema(self) -> None:
+        notifier = self._make_notifier()
+
+        from src.market_analyzer import MarketOverview
+
+        with patch.object(
+            market_review_module.MarketAnalyzer,
+            "get_market_overview",
+            side_effect=[
+                MarketOverview(date="2026-03-06"),
+                MarketOverview(date="2026-03-06"),
+            ],
+        ), patch.object(
+            market_review_module.MarketAnalyzer,
+            "search_market_news",
+            return_value=[],
+        ), patch.object(
+            market_review_module.MarketAnalyzer,
+            "generate_market_review",
+            side_effect=["JP body", "KR body"],
+        ), patch.object(market_review_module, "_persist_market_review_history") as persist_history:
+            result = run_market_review(
+                notifier,
+                config=SimpleNamespace(report_language="zh", market_review_region="jp,kr"),
+                send_notification=False,
+            )
+
+        self.assertIn("# 日股大盘复盘\n\nJP body", result)
+        self.assertIn("# 韩股大盘复盘\n\nKR body", result)
+        self.assertEqual(persist_history.call_args.kwargs["market_light_snapshots"], {})
+        payload = persist_history.call_args.kwargs["market_review_payload"]
+        self.assertNotIn("market_light", payload["markets"]["jp"])
+        self.assertNotIn("market_light", payload["markets"]["kr"])
 
     def test_run_market_review_normalizes_single_region_snapshot_key(self) -> None:
         notifier = self._make_notifier()
