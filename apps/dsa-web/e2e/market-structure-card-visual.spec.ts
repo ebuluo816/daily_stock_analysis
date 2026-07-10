@@ -10,6 +10,8 @@ import { build as viteBuild } from 'vite';
 import type { MarketStructureContext } from '../src/types/analysis';
 
 const shouldRunVisualEvidence = process.env.DSA_WEB_VISUAL_EVIDENCE === '1';
+const screenshotAttachmentName = 'market-structure-card-desktop-png';
+const evidenceAttachmentName = 'market-structure-card-visual-evidence';
 
 const githubRunUrl = (() => {
   const runId = process.env.GITHUB_RUN_ID;
@@ -24,27 +26,46 @@ const githubArtifactsUrl = githubRunUrl
   ? `${githubRunUrl}#artifacts`
   : null;
 
-function artifactNote(): string[] {
+type ArtifactNoteOptions = {
+  screenshotPath?: string;
+  evidencePath?: string;
+};
+
+function artifactNote(options: ArtifactNoteOptions = {}): string[] {
+  const { screenshotPath, evidencePath } = options;
   if (!githubRunUrl) {
-    return [
-      '若需外部可访问证据，请在本地使用以下命令并将 PNG 作为 PR 附件上传：',
+    const lines = [
+      '若需外部可访问证据，请在本地使用以下命令，并将截图附件作为 PR 附件上传：',
       '```bash',
       'cd apps/dsa-web',
       'DSA_WEB_VISUAL_EVIDENCE=1 npx playwright test e2e/market-structure-card-visual.spec.ts',
       '```',
-      '',
-      '产物文件（CI 之外）：',
-      '- `apps/dsa-web/test-results/market-structure-card-desktop.png`',
-      '- `apps/dsa-web/test-results/market-structure-card-visual-evidence.md`（建议直接粘到 PR 描述）',
     ];
+
+    if (screenshotPath || evidencePath) {
+      lines.push('本次运行产物（可直接在本地产物目录下查找）：');
+      if (screenshotPath) {
+        lines.push(`- screenshot: \`${screenshotPath}\``);
+      }
+      if (evidencePath) {
+        lines.push(`- evidence: \`${evidencePath}\``);
+      }
+    }
+
+    lines.push('');
+    lines.push('GitHub PR/评论可引用的附件名（稳定）：');
+    lines.push(`- \`${screenshotAttachmentName}\``);
+    lines.push(`- \`${evidenceAttachmentName}\``);
+    return lines;
   }
 
   return [
     'GitHub Actions 运行链接（含该测试附件）：',
     `- ${githubRunUrl}`,
     `- Artifacts 区域（或直接访问）：${githubArtifactsUrl}`,
-    '- 建议在该 run 的 PR 描述/评论中附 `market-structure-card-visual-evidence.md` 或截图附件',
-    '- 产物目录：`apps/dsa-web/test-results/market-structure-card-visual`',
+    '- 建议在该 run 的 PR 描述/评论中直接引用附件名（无需手工路径）：',
+    `- \`${screenshotAttachmentName}\`（PNG）`,
+    `- \`${evidenceAttachmentName}\`（说明）`,
   ];
 }
 
@@ -282,11 +303,13 @@ async function attachDesktopScreenshotArtifact(distIndexPath: string, testInfo: 
         '```',
         '',
         '证据产物说明：',
-        '- screenshot 附件: `market-structure-card-desktop-png`（与该测试产物包一并保存）',
+        `- screenshot 附件名: \`${screenshotAttachmentName}\`（与该测试产物包一并保存）`,
         `- entry HTML: ${path.relative(webRoot, distIndexPath)}`,
         `- fixture output: ${path.relative(webRoot, fixtureDir)}/`,
         '',
-        ...artifactNote(),
+        ...artifactNote({
+          evidencePath: path.relative(webRoot, notePath),
+        }),
       ].join('\n'),
     );
     await testInfo.attach('market-structure-card-screenshot-skipped', {
@@ -313,7 +336,7 @@ async function attachDesktopScreenshotArtifact(distIndexPath: string, testInfo: 
     const screenshotPath = testInfo.outputPath('market-structure-card-desktop.png');
     const evidenceIndexPath = testInfo.outputPath('market-structure-card-visual-evidence.md');
     await card.screenshot({ path: screenshotPath });
-    await testInfo.attach('market-structure-card-desktop-png', {
+    await testInfo.attach(screenshotAttachmentName, {
       path: screenshotPath,
       contentType: 'image/png',
     });
@@ -332,10 +355,13 @@ async function attachDesktopScreenshotArtifact(distIndexPath: string, testInfo: 
         'DSA_WEB_VISUAL_EVIDENCE=1 npx playwright test e2e/market-structure-card-visual.spec.ts',
         '```',
         '',
-        ...artifactNote(),
+        ...artifactNote({
+          screenshotPath: path.relative(webRoot, screenshotPath),
+          evidencePath: path.relative(webRoot, evidenceIndexPath),
+        }),
       ].join('\n'),
     );
-    await testInfo.attach('market-structure-card-visual-evidence', {
+    await testInfo.attach(evidenceAttachmentName, {
       path: evidenceIndexPath,
       contentType: 'text/markdown',
     });
