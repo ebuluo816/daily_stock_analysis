@@ -1,4 +1,4 @@
-import { chromium, expect, test, type TestInfo } from '@playwright/test';
+import { chromium, expect, test } from '@playwright/test';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import fs from 'node:fs';
@@ -8,64 +8,6 @@ import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { build as viteBuild } from 'vite';
 import type { MarketStructureContext } from '../src/types/analysis';
-
-const shouldRunVisualEvidence = process.env.DSA_WEB_VISUAL_EVIDENCE === '1';
-const screenshotAttachmentName = 'market-structure-card-desktop.png';
-const evidenceAttachmentName = 'market-structure-card-visual-evidence.md';
-
-const githubRunUrl = (() => {
-  const runId = process.env.GITHUB_RUN_ID;
-  const repository = process.env.GITHUB_REPOSITORY;
-  const server = process.env.GITHUB_SERVER_URL || 'https://github.com';
-  if (!runId || !repository) {
-    return null;
-  }
-  return `${server}/${repository}/actions/runs/${runId}`;
-})();
-const githubArtifactsUrl = githubRunUrl
-  ? `${githubRunUrl}#artifacts`
-  : null;
-
-function artifactNote(): string[] {
-  if (!githubRunUrl) {
-    const lines = [
-      '当前运行不在 GitHub Actions 中，暂无法直接提供 Actions Artifact 链接。',
-      '请将以下文件作为 PR 描述/评论附件上传：',
-      `- ${screenshotAttachmentName}`,
-      `- ${evidenceAttachmentName}`,
-      '',
-      '若需外部可访问证据，请在本地使用以下命令，并将截图附件作为 PR 附件上传：',
-      '```bash',
-      'cd apps/dsa-web',
-      'DSA_WEB_VISUAL_EVIDENCE=1 npx playwright test e2e/market-structure-card-visual.spec.ts',
-      '```',
-      '',
-      'PR 描述同步建议（建议直接同步）：',
-      '- 变更统计：`37 files changed, 4253 insertions(+), 31 deletions(-)`',
-      '- 当前 Head CI：`ai-governance:pass / backend-gate:pass / docker-build:pass / web-gate:pass`（按实际运行结果同步）',
-      '- 当前状态：全部通过（pass）或说明本地/环境差异。',
-    ];
-
-    lines.push('');
-    lines.push('GitHub PR/评论可直接引用的附件名（稳定）：');
-    lines.push(`- \`${screenshotAttachmentName}\``);
-    lines.push(`- \`${evidenceAttachmentName}\``);
-    return lines;
-  }
-
-  return [
-    'GitHub Actions 运行链接（含该测试附件）：',
-    `- ${githubRunUrl}`,
-    `- Artifacts 区域（或直接访问）：${githubArtifactsUrl}`,
-    '- 建议在该 run 的 PR 描述/评论中直接引用附件名（无需手工路径）：',
-    `- \`${screenshotAttachmentName}\`（PNG）`,
-    `- \`${evidenceAttachmentName}\`（说明）`,
-  ];
-}
-
-if (!shouldRunVisualEvidence) {
-  test.skip(true, 'Set DSA_WEB_VISUAL_EVIDENCE=1 to capture MarketStructureCard visual evidence.');
-}
 
 test.use({ locale: 'zh-CN' });
 
@@ -272,7 +214,7 @@ async function startStaticServer(rootDir: string): Promise<{
   };
 }
 
-async function attachDesktopScreenshotArtifact(distIndexPath: string, testInfo: TestInfo): Promise<void> {
+async function renderMarketStructureCard(distIndexPath: string): Promise<void> {
   let browser;
   try {
     browser = await chromium.launch();
@@ -280,32 +222,10 @@ async function attachDesktopScreenshotArtifact(distIndexPath: string, testInfo: 
     if (!isMissingPlaywrightBrowser(error)) {
       throw error;
     }
-    const notePath = testInfo.outputPath('market-structure-card-screenshot-skipped.md');
-    writeFile(
-      notePath,
-      [
-        'Playwright Chromium is not installed in this environment, so PNG capture was skipped.',
-        'The HTML artifact was built by Vite from the real MarketStructureCard React component.',
-        '',
-        '# MarketStructureCard Visual Evidence',
-        '',
-        'Command:',
-        '```bash',
-        'cd apps/dsa-web',
-        'DSA_WEB_VISUAL_EVIDENCE=1 npx playwright test e2e/market-structure-card-visual.spec.ts',
-        '```',
-        '',
-        '证据产物说明：',
-        `- screenshot 附件名: \`${screenshotAttachmentName}\`（与该测试产物包一并保存）`,
-        `- evidence 附件名: \`${evidenceAttachmentName}\`（同目录保存）`,
-        '',
-        ...artifactNote(),
-      ].join('\n'),
+    test.skip(
+      true,
+      'Playwright Chromium is not installed in this environment; skip visual smoke check.',
     );
-    await testInfo.attach('market-structure-card-screenshot-skipped', {
-      path: notePath,
-      contentType: 'text/markdown',
-    });
     return;
   }
 
@@ -323,59 +243,19 @@ async function attachDesktopScreenshotArtifact(distIndexPath: string, testInfo: 
     await expect(card.getByText('个股位置层')).toBeVisible();
     await expect(card.getByText(/机器人概念 \+4\.20%/).first()).toBeVisible();
 
-    const screenshotPath = testInfo.outputPath('market-structure-card-desktop.png');
-    const evidenceIndexPath = testInfo.outputPath('market-structure-card-visual-evidence.md');
-    await card.screenshot({ path: screenshotPath });
-    await testInfo.attach(screenshotAttachmentName, {
-      path: screenshotPath,
-      contentType: 'image/png',
-    });
-
-    writeFile(
-      evidenceIndexPath,
-      [
-        '# MarketStructureCard Visual Evidence',
-        '',
-        `- screenshot 附件名: \`${screenshotAttachmentName}\`（与该测试产物包一并保存）`,
-        `- evidence 附件名: \`${evidenceAttachmentName}\`（同目录保存）`,
-        '',
-        'Command:',
-        '```bash',
-        'cd apps/dsa-web',
-        'DSA_WEB_VISUAL_EVIDENCE=1 npx playwright test e2e/market-structure-card-visual.spec.ts',
-        '```',
-        '',
-        ...artifactNote(),
-      ].join('\n'),
-    );
-    await testInfo.attach(evidenceAttachmentName, {
-      path: evidenceIndexPath,
-      contentType: 'text/markdown',
-    });
+    const screenshot = await card.screenshot();
+    expect(screenshot).toBeTruthy();
+    expect(screenshot.length).toBeGreaterThan(1024);
   } finally {
     await browser.close();
     await staticServer.close();
   }
 }
 
-test.describe('MarketStructureCard visual evidence', () => {
-  test('writes desktop mock report artifacts from the real MarketStructureCard component', async (
-    { browserName },
-    testInfo,
-  ) => {
-    expect(browserName).toBe('chromium');
-
-    const { distIndexPath, entryPath } = await buildRealComponentFixture();
+test.describe('MarketStructureCard visual smoke', () => {
+  test('renders MarketStructureCard with expected sections', async () => {
+    const { distIndexPath } = await buildRealComponentFixture();
     expect(fs.existsSync(distIndexPath)).toBe(true);
-
-    await testInfo.attach('market-structure-card-real-component-entry', {
-      path: entryPath,
-      contentType: 'text/plain',
-    });
-    await testInfo.attach('market-structure-card-real-component-html', {
-      path: distIndexPath,
-      contentType: 'text/html',
-    });
-    await attachDesktopScreenshotArtifact(distIndexPath, testInfo);
+    await renderMarketStructureCard(distIndexPath);
   });
 });
