@@ -1673,6 +1673,39 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         self.assertEqual(report.summary.action, "watch")
         self.assertEqual(report.summary.action_label, "观望")
 
+    def test_build_analysis_report_reads_explicit_watch_action_without_directional_score_alignment(self) -> None:
+        if _build_analysis_report is None:
+            self.skipTest("analysis endpoint helpers unavailable in this environment")
+
+        report = _build_analysis_report(
+            report_data={
+                "meta": {"report_type": "detailed", "report_language": "zh"},
+                "summary": {
+                    "analysis_summary": "等待确认",
+                    "operation_advice": "持有",
+                    "sentiment_score": 72,
+                    "trend_prediction": "震荡",
+                    "action": "watch",
+                },
+                "strategy": {},
+                "details": {
+                    "raw_result": {
+                        "operation_advice": "持有",
+                        "action": "watch",
+                        "report_language": "zh",
+                    },
+                },
+            },
+            query_id="q-explicit-watch",
+            stock_code="600519",
+            stock_name="贵州茅台",
+            context_snapshot=None,
+            fallback_fundamental_payload=None,
+        )
+
+        self.assertEqual(report.summary.action, "watch")
+        self.assertEqual(report.summary.action_label, "观望")
+
     def test_build_analysis_report_stringifies_strategy_price_fields(self) -> None:
         if _build_analysis_report is None:
             self.skipTest("analysis endpoint helpers unavailable in this environment")

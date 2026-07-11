@@ -786,6 +786,20 @@ def test_extract_decision_guardrail_reason_reads_dashboard_sources() -> None:
     ) == "capital flow is unavailable"
 
 
+def test_build_action_fields_keeps_explicit_watch_action_regardless_of_score() -> None:
+    # Regression: explicit watch action should not be fallback-aligned to buy even with high score.
+    assert build_action_fields(
+        operation_advice="不建议卖出",
+        explicit_action="watch",
+        sentiment_score=72,
+        align_with_score=True,
+        report_language="zh",
+    ) == {
+        "action": "watch",
+        "action_label": "观望",
+    }
+
+
 @pytest.mark.parametrize("applied", [False, "off", "no"])
 def test_extract_decision_guardrail_reason_ignores_unapplied_stability_reason(applied) -> None:
     assert (
