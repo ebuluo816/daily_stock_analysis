@@ -171,6 +171,46 @@ class _SourceConflictHotspotService:
         }
 
 
+class _ThemedHotspotService:
+    def __init__(
+        self,
+        *,
+        active_themes=None,
+        leading_concepts=None,
+        leading_industries=None,
+        lagging_themes=None,
+        hotspot_constituents=None,
+        leader_stocks=None,
+    ) -> None:
+        self.active_themes = active_themes or []
+        self.leading_concepts = leading_concepts or []
+        self.leading_industries = leading_industries or []
+        self.lagging_themes = lagging_themes or []
+        self.hotspot_constituents = hotspot_constituents or []
+        self.leader_stocks = leader_stocks or []
+
+    def get_hotspots(
+        self,
+        *,
+        market: str,
+        trade_date=None,
+        limit: int = 5,
+        sector_rankings=None,
+        concept_rankings=None,
+    ):
+        return {
+            "status": "ok",
+            "market": market,
+            "trade_date": trade_date,
+            "active_themes": self.active_themes,
+            "leading_industries": self.leading_industries,
+            "leading_concepts": self.leading_concepts,
+            "lagging_themes": self.lagging_themes,
+            "hotspot_constituents": self.hotspot_constituents,
+            "leader_stocks": self.leader_stocks,
+        }
+
+
 class _BlockingRankingFetcherManager:
     def __init__(self) -> None:
         self.release = threading.Event()
@@ -688,6 +728,101 @@ def test_market_structure_service_combines_market_and_stock_layers() -> None:
     assert position["theme_phase"] == "accelerating"
     assert position["stock_role"] == "edge"
     assert "leader_stocks" in position["missing_fields"]
+
+
+def test_market_structure_service_recognizes_leader_only_for_matching_theme() -> None:
+    service = MarketStructureService(
+        fetcher_manager=_FakeFetcherManager(),
+        hotspot_service=_ThemedHotspotService(
+            leading_concepts=[{"name": "机器人概念", "change_pct": 4.2}],
+            hotspot_constituents=[{"code": "300024", "topic": "机器人概念"}],
+            leader_stocks=[{"code": "300024", "topic": "机器人概念"}],
+        ),
+    )
+    fundamental_context = {
+        "market": "cn",
+        "belong_boards": [{"name": "机器人概念", "type": "概念"}],
+        "concept_boards": {
+            "status": "ok",
+            "data": {"top": [{"name": "机器人概念", "change_pct": 4.2}], "bottom": []},
+        },
+    }
+
+    context = service.build_context(
+        code="300024",
+        stock_name="机器人",
+        market="cn",
+        fundamental_context=fundamental_context,
+        trade_date="2026-07-04",
+    )
+
+    position = context["stock_market_position"]
+    assert position["stock_role"] == "leader"
+    assert position["status"] == "ok"
+
+
+def test_market_structure_service_recognizes_follower_when_constituent_theme_matches() -> None:
+    service = MarketStructureService(
+        fetcher_manager=_FakeFetcherManager(),
+        hotspot_service=_ThemedHotspotService(
+            leading_concepts=[{"name": "机器人概念", "change_pct": 4.2}],
+            hotspot_constituents=[{"code": "300024", "topic": "机器人概念"}],
+            leader_stocks=[{"code": "300010", "topic": "机器人概念"}],
+        ),
+    )
+    fundamental_context = {
+        "market": "cn",
+        "belong_boards": [{"name": "机器人概念", "type": "概念"}],
+        "concept_boards": {
+            "status": "ok",
+            "data": {"top": [{"name": "机器人概念", "change_pct": 4.2}], "bottom": []},
+        },
+    }
+
+    context = service.build_context(
+        code="300024",
+        stock_name="机器人",
+        market="cn",
+        fundamental_context=fundamental_context,
+        trade_date="2026-07-04",
+    )
+
+    position = context["stock_market_position"]
+    assert position["stock_role"] == "follower"
+    assert position["status"] == "ok"
+
+
+def test_market_structure_service_rejects_role_evidence_from_unmatched_theme() -> None:
+    service = MarketStructureService(
+        fetcher_manager=_FakeFetcherManager(),
+        hotspot_service=_ThemedHotspotService(
+            leading_concepts=[{"name": "机器人概念", "change_pct": 4.2}],
+            hotspot_constituents=[{"code": "300024", "topic": "新能源"},
+                                 {"code": "300024", "topic": "半导体"}],
+            leader_stocks=[{"code": "300024", "theme": "新能源"}],
+        ),
+    )
+    fundamental_context = {
+        "market": "cn",
+        "belong_boards": [{"name": "机器人概念", "type": "概念"}],
+        "concept_boards": {
+            "status": "ok",
+            "data": {"top": [{"name": "机器人概念", "change_pct": 4.2}], "bottom": []},
+        },
+    }
+
+    context = service.build_context(
+        code="300024",
+        stock_name="机器人",
+        market="cn",
+        fundamental_context=fundamental_context,
+        trade_date="2026-07-04",
+    )
+
+    position = context["stock_market_position"]
+    assert position["stock_role"] == "edge"
+    assert "leader_stocks" not in position["missing_fields"]
+    assert "hotspot_constituents" not in position["missing_fields"]
 
 
 def test_market_structure_service_infers_concept_board_from_missing_type_name() -> None:

@@ -119,15 +119,30 @@ class MarketStructureService:
             market_theme_payload,
             related_boards,
         )
-        stock_role = self._infer_stock_role(
+        has_primary_market_evidence = self._has_primary_market_evidence(primary_theme)
+        hotspot_constituents = self._safe_cast_market_list(
+            market_theme_payload.get("hotspot_constituents"),
+        )
+        leader_stocks = self._safe_cast_market_list(
+            market_theme_payload.get("leader_stocks"),
+        )
+        has_stock_role_evidence = self._has_stock_role_evidence(
+            stock_code,
             primary_theme,
-            related_boards,
-            primary_theme_has_market_match,
-            self._has_primary_market_evidence(primary_theme),
-            self._has_stock_role_evidence(market_theme_payload),
+            hotspot_constituents,
+            leader_stocks,
+        )
+        stock_role = self._infer_stock_role(
+            stock_code=stock_code,
+            primary_theme=primary_theme,
+            related_boards=related_boards,
+            has_market_match=primary_theme_has_market_match,
+            has_primary_market_evidence=has_primary_market_evidence,
+            has_stock_role_evidence=has_stock_role_evidence,
+            hotspot_constituents=hotspot_constituents,
+            leader_stocks=leader_stocks,
         )
         theme_phase: ThemePhase = primary_theme.phase if primary_theme is not None else "unknown"
-        has_primary_market_evidence = self._has_primary_market_evidence(primary_theme)
 
         missing_fields: List[str] = []
         if not self._is_non_empty_list(market_theme_payload.get("hotspot_constituents")):
@@ -418,13 +433,18 @@ class MarketStructureService:
                 return board
         return related_boards[0]
 
-    @staticmethod
+    @classmethod
     def _infer_stock_role(
+        cls,
+        stock_code: str,
         primary_theme: Optional[PrimaryTheme],
         related_boards: List[StockBoardPosition],
         has_market_match: bool,
         has_primary_market_evidence: bool,
         has_stock_role_evidence: bool,
+        *,
+        hotspot_constituents: List[Dict[str, Any]],
+        leader_stocks: List[Dict[str, Any]],
     ) -> str:
         if primary_theme is None:
             return "edge" if related_boards else "unknown"
@@ -434,7 +454,19 @@ class MarketStructureService:
             return "edge" if related_boards else "unknown"
         for board in related_boards:
             if board.name == primary_theme.name:
-                return "follower"
+                if cls._is_stock_leader_for_theme(
+                    stock_code,
+                    primary_theme.name,
+                    leader_stocks,
+                ):
+                    return "leader"
+                if cls._is_stock_in_constituents_for_theme(
+                    stock_code,
+                    primary_theme.name,
+                    hotspot_constituents,
+                ):
+                    return "follower"
+                break
         return "edge" if related_boards else "unknown"
 
     @staticmethod
@@ -442,11 +474,127 @@ class MarketStructureService:
         return isinstance(value, list) and bool(value)
 
     @classmethod
-    def _has_stock_role_evidence(cls, market_theme_payload: Dict[str, Any]) -> bool:
+    def _has_stock_role_evidence(
+        cls,
+        stock_code: str,
+        primary_theme: Optional[PrimaryTheme],
+        hotspot_constituents: List[Dict[str, Any]],
+        leader_stocks: List[Dict[str, Any]],
+    ) -> bool:
+        if primary_theme is None:
+            return False
+        if not stock_code:
+            return False
         return (
-            cls._is_non_empty_list(market_theme_payload.get("hotspot_constituents"))
-            or cls._is_non_empty_list(market_theme_payload.get("leader_stocks"))
+            cls._is_stock_in_constituents_for_theme(
+                stock_code,
+                primary_theme.name,
+                hotspot_constituents,
+            )
+            or cls._is_stock_leader_for_theme(
+                stock_code,
+                primary_theme.name,
+                leader_stocks,
+            )
         )
+
+    @staticmethod
+    def _safe_cast_market_list(value: Any) -> List[Dict[str, Any]]:
+        if isinstance(value, list):
+            return [item for item in value if isinstance(item, dict)]
+        return []
+
+    @classmethod
+    def _is_stock_in_constituents_for_theme(
+        cls,
+        stock_code: str,
+        theme_name: str,
+        items: List[Dict[str, Any]],
+    ) -> bool:
+        return cls._match_stock_in_thematic_list(
+            stock_code,
+            theme_name,
+            items,
+        )
+
+    @classmethod
+    def _is_stock_leader_for_theme(
+        cls,
+        stock_code: str,
+        theme_name: str,
+        items: List[Dict[str, Any]],
+    ) -> bool:
+        return cls._match_stock_in_thematic_list(
+            stock_code,
+            theme_name,
+            items,
+        )
+
+    @classmethod
+    def _match_stock_in_thematic_list(
+        cls,
+        stock_code: str,
+        theme_name: str,
+        items: List[Dict[str, Any]],
+    ) -> bool:
+        normalized_stock_code = cls._normalize_stock_code(stock_code)
+        normalized_theme = cls._normalize_theme_name(theme_name)
+        if not normalized_stock_code or not normalized_theme:
+            return False
+
+        for item in items:
+            candidate_code = cls._extract_stock_code(item)
+            if not candidate_code or candidate_code != normalized_stock_code:
+                continue
+            themes = cls._extract_item_themes(item)
+            if not themes:
+                continue
+            if normalized_theme in themes:
+                return True
+        return False
+
+    @staticmethod
+    def _extract_stock_code(item: Dict[str, Any]) -> str:
+        for key in ("code", "stock_code", "ts_code", "ticker", "symbol"):
+            value = item.get(key)
+            if value is None:
+                continue
+            normalized = str(value).strip()
+            if normalized:
+                return normalized.upper()
+        return ""
+
+    @staticmethod
+    def _extract_item_themes(item: Dict[str, Any]) -> set[str]:
+        themes: set[str] = set()
+        for key in (
+            "theme",
+            "theme_name",
+            "topic",
+            "topic_name",
+            "industry",
+            "industry_name",
+            "concept",
+            "concept_name",
+            "board",
+            "board_name",
+            "theme_name_cn",
+            "theme_name_en",
+            "topic_name_cn",
+            "topic_name_en",
+        ):
+            value = str(item.get(key) or "").strip().lower()
+            if value:
+                themes.add(value)
+        return themes
+
+    @staticmethod
+    def _normalize_theme_name(value: str) -> str:
+        return str(value or "").strip().lower()
+
+    @staticmethod
+    def _normalize_stock_code(value: str) -> str:
+        return str(value or "").strip().upper()
 
     @staticmethod
     def _has_primary_market_evidence(primary_theme: Optional[PrimaryTheme]) -> bool:

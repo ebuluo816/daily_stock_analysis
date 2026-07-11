@@ -63,6 +63,8 @@ class MarketThemeContext(BaseModel):
     leading_industries: List[RankedThemeItem] = Field(default_factory=list)
     leading_concepts: List[RankedThemeItem] = Field(default_factory=list)
     lagging_themes: List[RankedThemeItem] = Field(default_factory=list)
+    hotspot_constituents: List[Any] = Field(default_factory=list)
+    leader_stocks: List[Any] = Field(default_factory=list)
     theme_breadth: ThemeBreadth = Field(default_factory=ThemeBreadth)
     data_quality: MarketStructureDataQuality = Field(default_factory=MarketStructureDataQuality)
 
