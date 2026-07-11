@@ -62,11 +62,14 @@ from src.schemas.decision_scale import (
         ("回避买入", "avoid"),
         ("规避买入", "avoid"),
         ("规避卖出", "avoid"),
+        ("不建议强烈买入", "avoid"),
         ("回避减仓", "avoid"),
         ("回避加仓", "avoid"),
         ("规避增持", "avoid"),
         ("回避建仓", "avoid"),
         ("do not buy", "avoid"),
+        ("not a strong buy", "avoid"),
+        ("not a strong sell", "hold"),
         ("회피", "avoid"),
         ("alert", "alert"),
         ("风险预警", "alert"),
@@ -203,6 +206,20 @@ def test_normalize_decision_action_handles_negated_trade_actions(value: str, exp
     assert normalize_decision_action(value) == expected
 
 
+def test_normalize_decision_action_handles_strong_negation_with_embedded_trade_terms() -> None:
+    assert normalize_decision_action("not a strong buy") == "avoid"
+    assert normalize_decision_action("not a strong sell") == "hold"
+    assert build_action_fields(
+        operation_advice="not a strong sell",
+        sentiment_score=90,
+        align_with_score=True,
+        report_language="zh",
+    ) == {
+        "action": "hold",
+        "action_label": "持有",
+    }
+
+
 @pytest.mark.parametrize(
     "advice",
     [
@@ -215,6 +232,8 @@ def test_normalize_decision_action_handles_negated_trade_actions(value: str, exp
         "can't buy before confirmation",
         "not a buy yet",
         "not to buy",
+        "not a strong buy",
+        "不建议强烈买入",
     ],
 )
 def test_build_action_fields_prioritizes_negated_buy_advice_over_embedded_buy_phrase(advice: str) -> None:

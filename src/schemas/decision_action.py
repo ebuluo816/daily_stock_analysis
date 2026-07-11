@@ -124,6 +124,9 @@ _NEGATED_ACTION_PHRASES: Dict[DecisionAction, tuple[str, ...]] = {
         "不建议买入",
         "避免买入",
         "不要买入",
+        "不建议强烈买入",
+        "避免强烈买入",
+        "不要强烈买入",
         "不宜买入",
         "先不买入",
         "不建议建仓",
@@ -168,6 +171,9 @@ _NEGATED_ACTION_PHRASES: Dict[DecisionAction, tuple[str, ...]] = {
         "暂不增持",
         "无须增持",
         "不建议卖出",
+        "不建议强烈卖出",
+        "避免强烈卖出",
+        "不要强烈卖出",
         "无需卖出",
         "不要卖出",
         "不宜卖出",
@@ -248,8 +254,8 @@ _COMPOUND_GUARD_ACTION_PHRASES: tuple[str, ...] = tuple(
     }
 )
 _ENGLISH_NEGATED_ACTION_TERMS: Dict[DecisionAction, tuple[str, ...]] = {
-    "avoid": ("buy",),
-    "hold": ("add", "accumulate", "sell", "reduce", "trim"),
+    "avoid": ("buy", "strong buy"),
+    "hold": ("add", "accumulate", "sell", "strong sell", "reduce", "trim"),
 }
 _ENGLISH_AVOIDED_HOLD_ACTION_TERMS = ("adding", "accumulating", "selling", "reducing", "trimming")
 _ENGLISH_DEFERRED_ACTION_TERMS = ("buy", "add", "accumulate", "sell", "reduce", "trim")
@@ -300,9 +306,13 @@ def _english_negated_action_matches(text: str) -> set[DecisionAction]:
         r"cannot\s+|can't\s+|cant\s+|"
         r"do\s+not\s+|don't\s+|dont\s+)"
     )
+    negation_strength = r"(?:strong\s+|strongly\s+|very\s+strong\s+)?"
     for action, terms in _ENGLISH_NEGATED_ACTION_TERMS.items():
         for term in terms:
-            if re.search(rf"(?<![a-z0-9_]){negation_prefix}{re.escape(term)}(?![a-z0-9_])", text):
+            if re.search(
+                rf"(?<![a-z0-9_]){negation_prefix}{negation_strength}{re.escape(term)}(?![a-z0-9_])",
+                text,
+            ):
                 matches.add(action)
     return matches
 
@@ -370,6 +380,8 @@ def _is_negated_hold_advice(value: Any) -> bool:
 
     text = _mask_english_financial_compounds(normalized)
     if _has_english_avoided_hold_action(text):
+        return True
+    if "hold" in _english_negated_action_matches(text):
         return True
 
     for phrase in _NEGATED_ACTION_PHRASES.get("hold", ()):
