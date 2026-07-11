@@ -256,6 +256,8 @@ async function renderMarketStructureCard(distIndexPath: string, testInfo: TestIn
       ? `${githubServer}/${githubRepository}/actions/runs/${githubRunId}`
       : 'Unavailable (not running in GitHub Actions)';
     const reproductionCommand = 'cd apps/dsa-web && npx playwright test e2e/market-structure-card-visual.spec.ts';
+    const artifactHint = `${artifactRunHint}/artifacts`;
+    const artifactName = 'market-structure-card-visual';
     const externalEvidenceDir = process.env.DSA_WEB_VISUAL_EVIDENCE
       ? path.resolve(process.env.DSA_WEB_VISUAL_EVIDENCE)
       : '';
@@ -281,13 +283,15 @@ async function renderMarketStructureCard(distIndexPath: string, testInfo: TestIn
         `Screenshot attachment: market-structure-card-visual.png`,
         `Local fallback path: ${screenshotRelPath}`,
         `Test output dir: ${testOutputDirRelPath}`,
-        `Playwright attachment name: market-structure-card-visual`,
         `GitHub Actions run: ${artifactRunHint}`,
+        `GitHub Actions artifacts page: ${artifactHint}`,
+        `Playwright attachment name (artifact evidence): ${artifactName}`,
+        `Expected uploaded artifact name: ${artifactName}`,
         ...(externalScreenshotPath ? [
           `External evidence copy dir: ${externalEvidenceDir}`,
           `External screenshot: ${path.relative(process.cwd(), externalScreenshotPath)}`,
         ] : []),
-        'Use attachment export (screenshot/artifact) from Playwright run artifact in this workflow run.',
+        'PR evidence建议粘贴 artifacts 页面 + 附件名用于复现审核；本地路径仅作兜底。',
         `Repro command: ${reproductionCommand}`,
       ].join('\n'),
     );
@@ -295,8 +299,9 @@ async function renderMarketStructureCard(distIndexPath: string, testInfo: TestIn
     testInfo.annotations.push({
       type: 'info',
       description:
-        'Market structure card visual evidence attached in Playwright artifacts; '
-        + 'also keep reproduction path for reviewer reference if artifact is not directly linked.',
+        `Market structure card visual evidence attached in Playwright artifacts. `
+        + `Artifact name: ${artifactName}，请在 ${artifactHint} 下载并在 PR 说明中附上该截图链接或附件。`
+        + ' 如未在 Actions 下载到同名附件，请附上复现命令和本地产物路径。',
     });
     await testInfo.attach('market-structure-card-visual', {
       path: screenshotPath,
