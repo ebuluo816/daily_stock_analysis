@@ -248,6 +248,7 @@ async function renderMarketStructureCard(distIndexPath: string, testInfo: TestIn
     expect(screenshot).toBeTruthy();
     expect(screenshot.length).toBeGreaterThan(1024);
     const screenshotRelPath = path.relative(process.cwd(), screenshotPath);
+    const testOutputDirRelPath = path.relative(process.cwd(), testInfo.outputDir);
     const githubServer = process.env.GITHUB_SERVER_URL || 'https://github.com';
     const githubRepository = process.env.GITHUB_REPOSITORY;
     const githubRunId = process.env.GITHUB_RUN_ID;
@@ -255,6 +256,23 @@ async function renderMarketStructureCard(distIndexPath: string, testInfo: TestIn
       ? `${githubServer}/${githubRepository}/actions/runs/${githubRunId}`
       : 'Unavailable (not running in GitHub Actions)';
     const reproductionCommand = 'cd apps/dsa-web && npx playwright test e2e/market-structure-card-visual.spec.ts';
+    const externalEvidenceDir = process.env.DSA_WEB_VISUAL_EVIDENCE
+      ? path.resolve(process.env.DSA_WEB_VISUAL_EVIDENCE)
+      : '';
+    let externalScreenshotPath: string = '';
+    if (externalEvidenceDir) {
+      try {
+        fs.mkdirSync(externalEvidenceDir, { recursive: true });
+        const externalScreenshot = path.join(externalEvidenceDir, 'market-structure-card-visual.png');
+        fs.copyFileSync(screenshotPath, externalScreenshot);
+        externalScreenshotPath = externalScreenshot;
+      } catch (copyError) {
+        testInfo.annotations.push({
+          type: 'warning',
+          description: `External visual evidence copy failed: ${String(copyError)}`,
+        });
+      }
+    }
     const artifactManifestPath = testInfo.outputPath('market-structure-card-visual-artifact.txt');
     writeFile(
       artifactManifestPath,
@@ -262,7 +280,13 @@ async function renderMarketStructureCard(distIndexPath: string, testInfo: TestIn
         'MarketStructureCard visual evidence attached',
         `Screenshot attachment: market-structure-card-visual.png`,
         `Local fallback path: ${screenshotRelPath}`,
+        `Test output dir: ${testOutputDirRelPath}`,
+        `Playwright attachment name: market-structure-card-visual`,
         `GitHub Actions run: ${artifactRunHint}`,
+        ...(externalScreenshotPath ? [
+          `External evidence copy dir: ${externalEvidenceDir}`,
+          `External screenshot: ${path.relative(process.cwd(), externalScreenshotPath)}`,
+        ] : []),
         'Use attachment export (screenshot/artifact) from Playwright run artifact in this workflow run.',
         `Repro command: ${reproductionCommand}`,
       ].join('\n'),
