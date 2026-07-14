@@ -194,26 +194,27 @@ def resolve_stock_scope(
         current_code = ""
 
     if not current_code:
-        if invalid_context_code:
-            candidates = extract_stock_codes(message_text)
-            allowed = set(candidates)
-            expected = candidates[0] if len(candidates) == 1 else ""
-            effective_context = dict(original_context)
-            mode = "switch" if expected else ("compare" if len(candidates) > 1 else "maintain")
-            if expected:
-                effective_context["stock_code"] = expected
-                effective_context["stock_name"] = ""
+        candidates = extract_stock_codes(message_text)
+        if not candidates and not invalid_context_code:
             return StockScopeResolution(
-                effective_context=_with_skills(effective_context, skills),
-                stock_scope=StockScope(
-                    expected_stock_code=expected,
-                    allowed_stock_codes=allowed,
-                    mode=mode,
-                ),
+                effective_context=_with_skills(original_context, skills),
+                stock_scope=None,
             )
+
+        allowed = set(candidates)
+        expected = candidates[0] if len(candidates) == 1 else ""
+        effective_context = dict(original_context)
+        mode = "switch" if expected else ("compare" if len(candidates) > 1 else "maintain")
+        if expected:
+            effective_context["stock_code"] = expected
+            effective_context["stock_name"] = ""
         return StockScopeResolution(
-            effective_context=_with_skills(original_context, skills),
-            stock_scope=None,
+            effective_context=_with_skills(effective_context, skills),
+            stock_scope=StockScope(
+                expected_stock_code=expected,
+                allowed_stock_codes=allowed,
+                mode=mode,
+            ),
         )
 
     candidates = extract_stock_codes(message_text)

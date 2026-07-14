@@ -1646,6 +1646,29 @@ class TestOrchestratorExecution(unittest.TestCase):
         self.assertEqual(ctx.meta["stock_scope"].mode, "switch")
         self.assertEqual(ctx.meta["stock_scope"].expected_stock_code, "AAPL")
 
+    def test_chat_initializes_first_turn_stock_scope_for_multi_agent_chain(self):
+        from src.agent.orchestrator import OrchestratorResult
+
+        orch = self._make_orchestrator()
+        captured = {}
+
+        def fake_execute(ctx, parse_dashboard=False, progress_callback=None):
+            captured["ctx"] = ctx
+            return OrchestratorResult(success=True, content="assistant reply")
+
+        with patch.object(orch, "_execute_pipeline", side_effect=fake_execute):
+            with patch("src.agent.orchestrator.build_visible_chat_history", return_value=[]):
+                with patch("src.agent.conversation.conversation_manager.get_or_create"):
+                    with patch("src.agent.conversation.conversation_manager.add_message"):
+                        orch.chat("分析一下美股aaoi", "session-1")
+
+        ctx = captured["ctx"]
+        self.assertEqual(ctx.stock_code, "AAOI")
+        self.assertEqual(ctx.stock_name, "")
+        self.assertEqual(ctx.meta["stock_scope"].mode, "switch")
+        self.assertEqual(ctx.meta["stock_scope"].expected_stock_code, "AAOI")
+        self.assertEqual(ctx.meta["stock_scope"].allowed_stock_codes, {"AAOI"})
+
     def test_chat_does_not_read_or_write_provider_trace(self):
         from src.agent.orchestrator import OrchestratorResult
 

@@ -267,6 +267,37 @@ class TestAgentExecutor(unittest.TestCase):
         assert messages[-1] == {"role": "user", "content": "当前问题"}
         assert captured["stock_scope"].expected_stock_code == "600519"
 
+    def test_chat_initializes_us_stock_scope_and_market_prompt_on_first_turn(self):
+        registry = _make_registry_with_echo()
+        adapter = _make_mock_adapter()
+        adapter._config = MagicMock()
+        executor = AgentExecutor(registry, adapter, max_steps=2)
+        captured = {}
+
+        def fake_run_loop(messages, tool_decls, parse_dashboard, progress_callback=None, stock_scope=None):
+            captured["messages"] = messages
+            captured["stock_scope"] = stock_scope
+            return AgentResult(success=True, content="assistant reply")
+
+        with patch.object(executor, "_run_loop", side_effect=fake_run_loop):
+            with patch(
+                "src.agent.executor.build_agent_chat_context_bundle",
+                return_value=SimpleNamespace(context_messages=[], diagnostics={}),
+            ):
+                with patch("src.agent.conversation.conversation_manager.get_or_create"):
+                    with patch("src.agent.conversation.conversation_manager.add_message"):
+                        executor.chat("分析一下美股aaoi", "session-1")
+
+        system_prompt = captured["messages"][0]["content"]
+        user_context = "\n".join(
+            msg["content"] for msg in captured["messages"] if msg["role"] == "user"
+        )
+        self.assertIn("本次分析对象为 **美股**", system_prompt)
+        self.assertIn("股票代码: AAOI", user_context)
+        self.assertEqual(captured["stock_scope"].mode, "switch")
+        self.assertEqual(captured["stock_scope"].expected_stock_code, "AAOI")
+        self.assertEqual(captured["stock_scope"].allowed_stock_codes, {"AAOI"})
+
     def test_chat_switches_effective_context_and_clears_previous_stock_fields(self):
         registry = _make_registry_with_echo()
         adapter = _make_mock_adapter()
@@ -368,6 +399,37 @@ class TestAgentExecutor(unittest.TestCase):
         self.assertEqual(result.effective_context["stock_code"], "600519")
         self.assertEqual(result.effective_context["stock_name"], "贵州茅台")
         self.assertEqual(result.stock_scope.allowed_stock_codes, {"600519", "AAPL"})
+
+    def test_resolve_stock_scope_initializes_first_turn_stock_context(self):
+        cases = [
+            ("分析一下美股aaoi", "AAOI"),
+            ("分析 AAPL", "AAPL"),
+            ("分析港股 HK00700", "HK00700"),
+        ]
+
+        for message, expected_code in cases:
+            with self.subTest(message=message):
+                result = resolve_stock_scope(message, None)
+
+                self.assertEqual(result.effective_context["stock_code"], expected_code)
+                self.assertEqual(result.effective_context["stock_name"], "")
+                self.assertEqual(result.stock_scope.mode, "switch")
+                self.assertEqual(result.stock_scope.expected_stock_code, expected_code)
+                self.assertEqual(result.stock_scope.allowed_stock_codes, {expected_code})
+
+    def test_resolve_stock_scope_keeps_first_turn_non_stock_chat_unscoped(self):
+        result = resolve_stock_scope("聊聊最近的市场情绪", None)
+
+        self.assertEqual(result.effective_context, {})
+        self.assertIsNone(result.stock_scope)
+
+    def test_resolve_stock_scope_treats_multiple_first_turn_codes_as_compare(self):
+        result = resolve_stock_scope("比较 AAPL 和 HK00700", None)
+
+        self.assertNotIn("stock_code", result.effective_context)
+        self.assertEqual(result.stock_scope.mode, "compare")
+        self.assertEqual(result.stock_scope.expected_stock_code, "")
+        self.assertEqual(result.stock_scope.allowed_stock_codes, {"AAPL", "HK00700"})
 
     def test_resolve_stock_scope_keeps_ambiguous_bare_code_on_current_stock(self):
         result = resolve_stock_scope("AAPL", {"stock_code": "600519", "stock_name": "贵州茅台"})
